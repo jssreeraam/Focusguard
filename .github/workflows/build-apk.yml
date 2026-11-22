@@ -55,10 +55,10 @@ jobs:
           echo "Patching $GRADLE_FILE"
           sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 24/g' "$GRADLE_FILE"
           sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 24/g' "$GRADLE_FILE"
-          sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 35/g' "$GRADLE_FILE"
-          sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 35/g' "$GRADLE_FILE"
-          sed -i 's/targetSdk = flutter.targetSdkVersion/targetSdk = 35/g' "$GRADLE_FILE"
-          sed -i 's/targetSdkVersion flutter.targetSdkVersion/targetSdkVersion 35/g' "$GRADLE_FILE"
+          sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/g' "$GRADLE_FILE"
+          sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 36/g' "$GRADLE_FILE"
+          sed -i 's/targetSdk = flutter.targetSdkVersion/targetSdk = 36/g' "$GRADLE_FILE"
+          sed -i 's/targetSdkVersion flutter.targetSdkVersion/targetSdkVersion 36/g' "$GRADLE_FILE"
 
       - name: Build Release APK
         working-directory: build_app
