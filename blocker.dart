@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 
-/// Bridge to native Android AccessibilityService, Device Admin, and Monotonic Lock Engine.
+/// Native Android bridge: Accessibility blocker, Device Admin, Monotonic Lock,
+/// Wakelock, Offline Brown Noise, and Daily Revision Notifications.
 class Blocker {
   static const _c = MethodChannel('focusguard/blocker');
 
@@ -19,6 +20,12 @@ class Blocker {
         'pkgs': pkgs,
         'durationMs': duration.inMilliseconds,
       });
+    } catch (_) {}
+  }
+
+  static Future<void> clearLock() async {
+    try {
+      await _c.invokeMethod('clearLock');
     } catch (_) {}
   }
 
@@ -87,6 +94,40 @@ class Blocker {
   static Future<void> requestNotificationPermission() async {
     try {
       await _c.invokeMethod('requestNotificationPermission');
+    } catch (_) {}
+  }
+
+  static Future<void> setWakelock(bool on) async {
+    try {
+      await _c.invokeMethod('setWakelock', {'on': on});
+    } catch (_) {}
+  }
+
+  static Future<void> setBrownNoise(bool on) async {
+    try {
+      await _c.invokeMethod('setBrownNoise', {'on': on});
+    } catch (_) {}
+  }
+
+  static Future<void> scheduleDailyReminder({
+    required bool on,
+    required int hour,
+    required int minute,
+    required String body,
+  }) async {
+    try {
+      await _c.invokeMethod('scheduleDailyReminder', {
+        'on': on,
+        'hour': hour,
+        'minute': minute,
+        'body': body,
+      });
+    } catch (_) {}
+  }
+
+  static Future<void> showNotification(String title, String body) async {
+    try {
+      await _c.invokeMethod('showNotification', {'title': title, 'body': body});
     } catch (_) {}
   }
 }

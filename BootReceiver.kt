@@ -17,6 +17,7 @@ class BootReceiver : BroadcastReceiver() {
                 if (LockStore.syncAndGetRemainingMs(context) > 0L) {
                     LockGuardService.start(context)
                 }
+                ReminderReceiver.rescheduleIfEnabled(context)
             }
         }
     }

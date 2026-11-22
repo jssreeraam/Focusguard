@@ -5,11 +5,6 @@ import android.os.SystemClock
 import android.provider.Settings
 import kotlin.math.max
 
-/**
- * Monotonic, tamper-resistant lock state store.
- * Uses SystemClock.elapsedRealtime() so changing Android's Date & Time
- * forward or backward NEVER bypasses an active penalty lock.
- */
 object LockStore {
     private const val PREFS = "fg_lock_v2"
     private const val KEY_PKGS = "pkgs"
@@ -39,6 +34,14 @@ object LockStore {
     }
 
     @Synchronized
+    fun clearLock(ctx: Context) {
+        prefs(ctx).edit()
+            .putBoolean(KEY_ACTIVE, false)
+            .putLong(KEY_REM_MS, 0L)
+            .apply()
+    }
+
+    @Synchronized
     fun syncAndGetRemainingMs(ctx: Context): Long {
         val p = prefs(ctx)
         if (!p.getBoolean(KEY_ACTIVE, false)) return 0L
@@ -50,12 +53,9 @@ object LockStore {
         val nowWall = System.currentTimeMillis()
 
         if (nowEl >= lastEl && lastEl > 0L) {
-            // Normal monotonic progression: immune to system clock edits.
             val delta = nowEl - lastEl
             rem = max(0L, rem - delta)
         } else if (nowEl < lastEl) {
-            // Phone rebooted (elapsedRealtime reset to 0).
-            // Only deduct wall-clock time if automatic network time is ON and delta is plausible (<12h).
             val autoTime = try {
                 Settings.Global.getInt(ctx.contentResolver, Settings.Global.AUTO_TIME, 0) == 1
             } catch (_: Exception) {
@@ -82,7 +82,6 @@ object LockStore {
     fun onTimeTampered(ctx: Context) {
         val p = prefs(ctx)
         if (!p.getBoolean(KEY_ACTIVE, false)) return
-        // Advance monotonic sync first, then anchor new wall time without reducing rem_ms.
         syncAndGetRemainingMs(ctx)
         p.edit().putLong(KEY_LAST_WALL, System.currentTimeMillis()).apply()
     }

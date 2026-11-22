@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
+import android.view.WindowManager
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterActivity
@@ -16,6 +17,11 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
+    override fun onDestroy() {
+        BrownNoiseEngine.setEnabled(false)
+        super.onDestroy()
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "focusguard/blocker")
@@ -39,15 +45,16 @@ class MainActivity : FlutterActivity() {
                         }
                         "setLock" -> {
                             val pkgs = (call.argument<List<String>>("pkgs") ?: emptyList()).toSet()
-                            val durationMs = call.argument<Number>("durationMs")?.toLong()
-                                ?: run {
-                                    val until = (call.argument<Number>("until") ?: 0L).toLong()
-                                    (until - System.currentTimeMillis()).coerceAtLeast(0L)
-                                }
+                            val durationMs = call.argument<Number>("durationMs")?.toLong() ?: 0L
                             LockStore.startLock(this, pkgs, durationMs)
                             if (durationMs > 0L && pkgs.isNotEmpty()) {
                                 LockGuardService.start(this)
                             }
+                            result.success(true)
+                        }
+                        "clearLock" -> {
+                            LockStore.clearLock(this)
+                            LockGuardService.stop(this)
                             result.success(true)
                         }
                         "lockRemainingMs" -> {
@@ -58,14 +65,6 @@ class MainActivity : FlutterActivity() {
                             val blockAll = call.argument<Boolean>("blockAllSettings") ?: false
                             LockStore.setAntiTamper(this, strict, blockAll)
                             result.success(true)
-                        }
-                        "getAntiTamper" -> {
-                            result.success(
-                                mapOf(
-                                    "strict" to LockStore.isStrictTamper(this),
-                                    "blockAllSettings" to LockStore.isBlockAllSettings(this)
-                                )
-                            )
                         }
                         "enabled" -> result.success(BlockerService.isEnabled(this))
                         "openSettings" -> {
@@ -118,6 +117,41 @@ class MainActivity : FlutterActivity() {
                                     )
                                 }
                             }
+                            result.success(true)
+                        }
+                        "setWakelock" -> {
+                            val on = call.argument<Boolean>("on") ?: false
+                            runOnUiThread {
+                                if (on) {
+                                    window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                                } else {
+                                    window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                                }
+                            }
+                            result.success(true)
+                        }
+                        "setBrownNoise" -> {
+                            val on = call.argument<Boolean>("on") ?: false
+                            BrownNoiseEngine.setEnabled(on)
+                            result.success(true)
+                        }
+                        "scheduleDailyReminder" -> {
+                            val on = call.argument<Boolean>("on") ?: false
+                            val hour = call.argument<Int>("hour") ?: 8
+                            val minute = call.argument<Int>("minute") ?: 30
+                            val body = call.argument<String>("body")
+                                ?: "Open Revise tab and tick off today's spaced repetition topics."
+                            if (on) {
+                                ReminderReceiver.scheduleDaily(this, hour, minute, body)
+                            } else {
+                                ReminderReceiver.cancelDaily(this)
+                            }
+                            result.success(true)
+                        }
+                        "showNotification" -> {
+                            val title = call.argument<String>("title") ?: "FocusGuard"
+                            val body = call.argument<String>("body") ?: ""
+                            ReminderReceiver.showNow(this, title, body)
                             result.success(true)
                         }
                         else -> result.notImplemented()

@@ -1,11 +1,12 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:google_mlkit_image_labeling/google_mlkit_image_labeling.dart';
 import '../domain/models.dart';
 
-/// 100% on-device vision. One still frame per check, classified and deleted immediately.
-/// Golden rule: when unsure, return neutral. Penalties require two consecutive hits.
+/// 100% on-device vision supporting Back (default) and Front cameras.
+/// Rear flash is explicitly forced OFF. Every frame is deleted immediately.
 class VisionService {
   CameraController? cam;
   final _face = FaceDetector(
@@ -20,42 +21,57 @@ class VisionService {
 
   int _miss = 0, _away = 0, _eyes = 0;
   bool _capturing = false;
+  bool _initializing = false;
 
-  Future<void> init() async {
-    await dispose();
-    final cams = await availableCameras();
-    if (cams.isEmpty) {
-      throw StateError('No camera found on this device.');
+  Future<void> init({bool useRear = true}) async {
+    if (_initializing) return;
+    _initializing = true;
+    try {
+      await dispose();
+      final cams = await availableCameras();
+      if (cams.isEmpty) {
+        throw StateError('No camera found on this device.');
+      }
+      final target = useRear ? CameraLensDirection.back : CameraLensDirection.front;
+      final selected = cams.firstWhere(
+        (c) => c.lensDirection == target,
+        orElse: () => cams.first,
+      );
+      final controller = CameraController(
+        selected,
+        ResolutionPreset.medium,
+        enableAudio: false,
+        imageFormatGroup: ImageFormatGroup.jpeg,
+      );
+      await controller.initialize();
+      try {
+        await controller.setFlashMode(FlashMode.off);
+      } catch (_) {}
+      cam = controller;
+      _miss = _away = _eyes = 0;
+    } finally {
+      _initializing = false;
     }
-    final front = cams.firstWhere(
-      (c) => c.lensDirection == CameraLensDirection.front,
-      orElse: () => cams.first,
-    );
-    final controller = CameraController(
-      front,
-      ResolutionPreset.medium,
-      enableAudio: false,
-      imageFormatGroup: ImageFormatGroup.jpeg,
-    );
-    await controller.initialize();
-    cam = controller;
-    _miss = _away = _eyes = 0;
   }
 
   Future<FocusState> classify() async {
     final c = cam;
-    if (c == null || !c.value.isInitialized || _capturing) {
+    if (c == null || !c.value.isInitialized || _capturing || _initializing) {
       return FocusState.neutral;
     }
+    if (c.value.isTakingPicture) return FocusState.neutral;
+
     _capturing = true;
     XFile? shot;
     try {
-      shot = await c.takePicture();
+      try {
+        await c.setFlashMode(FlashMode.off);
+      } catch (_) {}
+      shot = await c.takePicture().timeout(const Duration(seconds: 6));
       final img = InputImage.fromFilePath(shot.path);
       final faces = await _face.processImage(img);
 
       if (faces.isEmpty) {
-        // Head down writing can hide face, so require two consecutive misses.
         _away = 0;
         _eyes = 0;
         _miss++;

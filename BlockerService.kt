@@ -52,13 +52,11 @@ class BlockerService : AccessibilityService() {
         val remaining = LockStore.syncAndGetRemainingMs(this)
         if (remaining <= 0L) return
 
-        // 1. Block selected distraction apps immediately on window state change
         if (LockStore.isBlockedPackage(this, pkg)) {
             kickHome("FocusGuard: Locked (${formatShort(remaining)} left). Earn it back.")
             return
         }
 
-        // 2. Anti-tamper protection on Settings / Package Installer while lock is active
         if (LockStore.isStrictTamper(this) && settingsPackages.contains(pkg)) {
             if (LockStore.isBlockAllSettings(this)) {
                 kickHome("FocusGuard Strict Mode: Settings blocked (${formatShort(remaining)} left).")

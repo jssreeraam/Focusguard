@@ -3,10 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'data/repo.dart';
 import 'state/providers.dart';
 import 'ui/common.dart';
 import 'ui/home.dart';
 import 'ui/insights.dart';
+import 'ui/revise.dart';
 import 'ui/rules.dart';
 import 'ui/session.dart';
 
@@ -47,6 +49,7 @@ class _Root extends ConsumerState<Root> {
   @override
   Widget build(BuildContext context) {
     final ph = ref.watch(sessionProvider.select((s) => s.phase));
+    ref.watch(dbVersionProvider);
     Widget body;
     switch (ph) {
       case Phase.running:
@@ -60,16 +63,46 @@ class _Root extends ConsumerState<Root> {
           key: const ValueKey('i'),
           body: IndexedStack(
             index: tab,
-            children: const [HomeScreen(), InsightsScreen(), RulesScreen()],
-          ),
-          bottomNavigationBar: NavigationBar(
-            selectedIndex: tab,
-            onDestinationSelected: (i) => setState(() => tab = i),
-            destinations: const [
-              NavigationDestination(icon: Icon(Icons.shield_outlined), label: 'Study'),
-              NavigationDestination(icon: Icon(Icons.insights_outlined), label: 'Insights'),
-              NavigationDestination(icon: Icon(Icons.gavel_outlined), label: 'Rules'),
+            children: const [
+              HomeScreen(),
+              ReviseScreen(),
+              InsightsScreen(),
+              RulesScreen(),
             ],
+          ),
+          bottomNavigationBar: FutureBuilder<int>(
+            future: Repo.dueCount(),
+            builder: (_, snap) {
+              final due = snap.data ?? 0;
+              return NavigationBar(
+                selectedIndex: tab,
+                onDestinationSelected: (i) => setState(() => tab = i),
+                destinations: [
+                  const NavigationDestination(
+                    icon: Icon(Icons.shield_outlined),
+                    label: 'Study',
+                  ),
+                  NavigationDestination(
+                    icon: Badge(
+                      isLabelVisible: due > 0,
+                      label: Text('$due'),
+                      backgroundColor: kAmber,
+                      textColor: const Color(0xFF1B1405),
+                      child: const Icon(Icons.replay_circle_filled_outlined),
+                    ),
+                    label: 'Revise',
+                  ),
+                  const NavigationDestination(
+                    icon: Icon(Icons.insights_outlined),
+                    label: 'Stats',
+                  ),
+                  const NavigationDestination(
+                    icon: Icon(Icons.gavel_outlined),
+                    label: 'Rules',
+                  ),
+                ],
+              );
+            },
           ),
         );
     }
@@ -78,7 +111,7 @@ class _Root extends ConsumerState<Root> {
       body: PopScope(
         canPop: ph == Phase.idle,
         child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 450),
+          duration: const Duration(milliseconds: 400),
           child: body,
         ),
       ),

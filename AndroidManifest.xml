@@ -41,7 +41,6 @@
             </intent-filter>
         </activity>
 
-        <!-- Accessibility Service: App Lockdown & Anti-Tamper Guard -->
         <service
             android:name=".BlockerService"
             android:label="@string/fg_blocker_label"
@@ -55,7 +54,6 @@
                 android:resource="@xml/blocker_config" />
         </service>
 
-        <!-- Foreground Service: Keeps monotonic lock timer alive in background -->
         <service
             android:name=".LockGuardService"
             android:exported="false"
@@ -65,7 +63,6 @@
                 android:value="Enforces user-opted study app lockout timer and anti-tamper protection" />
         </service>
 
-        <!-- Device Admin: Prevents uninstalling FocusGuard while enabled -->
         <receiver
             android:name=".FocusAdminReceiver"
             android:label="@string/fg_admin_label"
@@ -80,7 +77,6 @@
             </intent-filter>
         </receiver>
 
-        <!-- Boot & Time-Tamper Receiver: Survives phone restarts and ignores manual clock jumps -->
         <receiver
             android:name=".BootReceiver"
             android:enabled="true"
@@ -92,6 +88,11 @@
                 <action android:name="android.intent.action.TIMEZONE_CHANGED" />
             </intent-filter>
         </receiver>
+
+        <receiver
+            android:name=".ReminderReceiver"
+            android:enabled="true"
+            android:exported="false" />
 
         <meta-data
             android:name="flutterEmbedding"

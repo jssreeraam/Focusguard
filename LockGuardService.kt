@@ -33,6 +33,7 @@ class LockGuardService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val rem = LockStore.syncAndGetRemainingMs(applicationContext)
         if (rem <= 0L) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return START_NOT_STICKY
         }
@@ -44,9 +45,7 @@ class LockGuardService : Service() {
             } else {
                 startForeground(NOTIF_ID, notif)
             }
-        } catch (_: Exception) {
-            // Do not crash if OEM restricts foreground start
-        }
+        } catch (_: Exception) {}
         handler.removeCallbacks(ticker)
         handler.postDelayed(ticker, 30_000L)
         return START_STICKY
@@ -85,7 +84,7 @@ class LockGuardService : Service() {
         val totalMin = (remMs / 60000L).coerceAtLeast(1L)
         val h = totalMin / 60L
         val m = totalMin % 60L
-        val text = if (h > 0L) "${h}h ${m}m remaining • Selected apps locked" else "${m}m remaining • Selected apps locked"
+        val text = if (h > 0L) "${h}h ${m}m remaining · Selected apps locked" else "${m}m remaining · Selected apps locked"
 
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(this, CHANNEL_ID)
@@ -117,6 +116,12 @@ class LockGuardService : Service() {
             try {
                 val i = Intent(ctx.applicationContext, LockGuardService::class.java)
                 ContextCompat.startForegroundService(ctx.applicationContext, i)
+            } catch (_: Exception) {}
+        }
+
+        fun stop(ctx: Context) {
+            try {
+                ctx.applicationContext.stopService(Intent(ctx.applicationContext, LockGuardService::class.java))
             } catch (_: Exception) {}
         }
     }
