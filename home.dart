@@ -15,7 +15,6 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _H extends ConsumerState<HomeScreen> with WidgetsBindingObserver {
-  int len = 50;
   int lockRemMs = 0;
   Timer? _poll;
   final _goalCtl = TextEditingController();
@@ -511,15 +510,18 @@ class _H extends ConsumerState<HomeScreen> with WidgetsBindingObserver {
                   ),
                 ),
                 const SizedBox(height: 10),
+                const Text('Random checks per minute (anti-cheat)',
+                    style: TextStyle(fontSize: 12, color: kMute, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 6),
                 Wrap(
                   spacing: 8,
                   runSpacing: 6,
                   children: [
-                    for (final v in [15, 25, 50, 90, 120, 180])
+                    for (final c in [1, 2, 3, 4, 6])
                       ChoiceChip(
-                        label: Text(v == 180 ? '3h GT' : (v >= 60 ? fmtMins(v) : '${v}m')),
-                        selected: len == v,
-                        onSelected: (_) => setState(() => len = v),
+                        label: Text('$c/min'),
+                        selected: p.checksPerMin == c,
+                        onSelected: (_) => ref.read(prefsProvider.notifier).set({'checksPerMin': c}),
                       )
                   ],
                 ),
@@ -529,11 +531,10 @@ class _H extends ConsumerState<HomeScreen> with WidgetsBindingObserver {
           BigButton(
             p.tokLeft == 0 && !calib && !p.phoneStudyMode
                 ? 'No tokens left today'
-                : 'Begin ${p.lastSubject} (${fmtMins(len)})',
+                : 'Begin ${p.lastSubject} (${p.checksPerMin}/min random)',
             () async {
               if (p.tokLeft == 0 && !calib && !p.phoneStudyMode) return;
               final ok = await ref.read(sessionProvider.notifier).start(
-                    len,
                     subject: p.lastSubject,
                     mode: p.lastMode,
                     goalNote: _goalCtl.text,

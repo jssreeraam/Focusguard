@@ -343,7 +343,7 @@ class _R extends ConsumerState<RulesScreen> with WidgetsBindingObserver {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Cap('Proctor camera & check interval'),
+                const Cap('Proctor camera & random checks/min'),
                 Wrap(
                   spacing: 8,
                   children: [
@@ -360,14 +360,17 @@ class _R extends ConsumerState<RulesScreen> with WidgetsBindingObserver {
                   ],
                 ),
                 const SizedBox(height: 10),
+                const Text('Randomized checks per minute', style: TextStyle(fontSize: 12.5, color: kMute)),
+                const SizedBox(height: 6),
                 Wrap(
                   spacing: 8,
+                  runSpacing: 6,
                   children: [
-                    for (final v in [15, 30, 60, 120])
+                    for (final c in [1, 2, 3, 4, 6])
                       ChoiceChip(
-                        label: Text('${v}s'),
-                        selected: p.intervalSec == v,
-                        onSelected: (_) => n.set({'iv': v}),
+                        label: Text('$c/min'),
+                        selected: p.checksPerMin == c,
+                        onSelected: (_) => n.set({'checksPerMin': c}),
                       )
                   ],
                 ),

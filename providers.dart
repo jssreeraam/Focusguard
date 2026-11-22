@@ -32,7 +32,8 @@ class Prefs {
   int get tokLeft => (m['tokLeft'] ?? 0) as int;
   int get calibDist => (m['calibDist'] ?? 0) as int;
   int get calibSessions => (m['calibSessions'] ?? 0) as int;
-  int get intervalSec => (m['iv'] ?? 60) as int;
+  int get checksPerMin => (m['checksPerMin'] ?? 1) as int;
+  int get intervalSec => max(10, 60 ~/ max(1, checksPerMin));
   bool get streakReset => (m['streakReset'] ?? true) as bool;
   int get cooldownSec => (m['cooldown'] ?? 60) as int;
   int get lockHours => (m['lockHours'] ?? 24) as int;
@@ -149,25 +150,23 @@ enum Phase { idle, running, summary, locked }
 
 class SS {
   final Phase phase;
-  final int total, elapsed, tokens, maxTokens, cooldown, lastCost;
+  final int tokens, maxTokens, cooldown, lastCost, checksPerMin;
   final List<FocusState> checks;
-  final bool calib, phoneMode, hardcoreGt, brownNoise;
+  final bool calib, phoneMode, brownNoise;
   final String subject, mode, goalNote;
   final int? savedSessionId;
   final SessionRecord? result;
 
   const SS({
     this.phase = Phase.idle,
-    this.total = 0,
-    this.elapsed = 0,
     this.tokens = 0,
     this.maxTokens = 0,
     this.cooldown = 0,
     this.lastCost = 0,
+    this.checksPerMin = 1,
     this.checks = const [],
     this.calib = false,
     this.phoneMode = false,
-    this.hardcoreGt = false,
     this.brownNoise = false,
     this.subject = 'Medicine',
     this.mode = 'Reading',
@@ -178,9 +177,15 @@ class SS {
 
   FocusState get last => checks.isEmpty ? FocusState.study : checks.last;
 
+  double get liveScore {
+    if (checks.isEmpty) return 1.0;
+    final study = checks.where((c) => c == FocusState.study).length;
+    final neutral = checks.where((c) => c == FocusState.neutral).length;
+    return (study + 0.5 * neutral) / checks.length;
+  }
+
   SS copy({
     Phase? phase,
-    int? elapsed,
     int? tokens,
     int? cooldown,
     int? lastCost,
@@ -191,16 +196,14 @@ class SS {
   }) =>
       SS(
         phase: phase ?? this.phase,
-        total: total,
-        elapsed: elapsed ?? this.elapsed,
         tokens: tokens ?? this.tokens,
         maxTokens: maxTokens,
         cooldown: cooldown ?? this.cooldown,
         lastCost: lastCost ?? this.lastCost,
+        checksPerMin: checksPerMin,
         checks: checks ?? this.checks,
         calib: calib,
         phoneMode: phoneMode,
-        hardcoreGt: hardcoreGt,
         brownNoise: brownNoise ?? this.brownNoise,
         subject: subject,
         mode: mode,
@@ -212,16 +215,17 @@ class SS {
 
 class SessionCtl extends Notifier<SS> {
   final vision = VisionService();
-  Timer? _t;
+  final _rng = Random();
+  Timer? _checkTimer;
+  Timer? _cooldownTimer;
   bool _busy = false;
   DateTime _start = DateTime.now();
-  int _nextCheckSec = 60;
+  int _slotIndex = 0;
 
   @override
   SS build() => const SS();
 
-  Future<bool> start(
-    int min, {
+  Future<bool> start({
     required String subject,
     required String mode,
     required String goalNote,
@@ -232,7 +236,6 @@ class SessionCtl extends Notifier<SS> {
     pn.set({'lastSubject': subject, 'lastMode': mode, 'phoneStudyMode': phoneMode});
     final pr = ref.read(prefsProvider);
     final calib = pr.baseline == 0;
-    final hardcoreGt = min >= 180 && mode == 'Grand Test';
 
     if (!phoneMode) {
       try {
@@ -242,30 +245,63 @@ class SessionCtl extends Notifier<SS> {
       }
       await Blocker.setWakelock(true);
     } else if (pr.pkgs.isNotEmpty) {
-      // YPT-style Phone Study Mode: lock selected distraction apps for this block
-      await Blocker.setLockDuration(pr.pkgs, Duration(minutes: min));
+      await Blocker.setLockDuration(pr.pkgs, const Duration(hours: 2));
     }
 
     await Blocker.requestNotificationPermission();
 
     _start = DateTime.now();
-    _nextCheckSec = pr.intervalSec;
+    _slotIndex = 0;
     _busy = false;
-    _t?.cancel();
+    _checkTimer?.cancel();
+    _cooldownTimer?.cancel();
+
     state = SS(
       phase: Phase.running,
-      total: min * 60,
       tokens: calib ? 0 : pr.tokLeft,
       maxTokens: calib ? 0 : pr.pool,
+      checksPerMin: pr.checksPerMin,
       calib: calib,
       phoneMode: phoneMode,
-      hardcoreGt: hardcoreGt,
       subject: subject,
       mode: mode,
       goalNote: goalNote.trim(),
     );
-    _t = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
+
+    if (!phoneMode) {
+      _scheduleNextRandomCheck();
+    }
     return true;
+  }
+
+  /// Schedules the next check at an unpredictable random second inside the next slot.
+  /// Zero 1-second UI ticking -> dramatically lower battery usage!
+  void _scheduleNextRandomCheck() {
+    if (state.phase != Phase.running) return;
+    final slotSec = max(10, 60 ~/ max(1, state.checksPerMin));
+    final slotStart = _slotIndex * slotSec;
+    final offset = _rng.nextInt(max(1, slotSec - 2)) + 1;
+    final targetSec = slotStart + offset;
+    _slotIndex++;
+
+    final elapsedSec = DateTime.now().difference(_start).inSeconds;
+    final waitSec = max(2, targetSec - elapsedSec);
+
+    _checkTimer?.cancel();
+    _checkTimer = Timer(Duration(seconds: waitSec), () async {
+      if (state.phase != Phase.running) return;
+      if (!_busy) {
+        _busy = true;
+        try {
+          await _check();
+        } finally {
+          _busy = false;
+        }
+      }
+      if (state.phase == Phase.running) {
+        _scheduleNextRandomCheck();
+      }
+    });
   }
 
   Future<void> toggleBrownNoise() async {
@@ -285,26 +321,6 @@ class SessionCtl extends Notifier<SS> {
       try {
         await vision.init(useRear: ref.read(prefsProvider).useRearCam);
       } catch (_) {}
-    }
-  }
-
-  Future<void> _tick() async {
-    if (state.phase != Phase.running) return;
-    final e = max(0, DateTime.now().difference(_start).inSeconds);
-    state = state.copy(elapsed: min(e, state.total));
-    final iv = ref.read(prefsProvider).intervalSec;
-
-    if (!state.phoneMode && e >= _nextCheckSec && !_busy) {
-      _nextCheckSec = ((e ~/ iv) + 1) * iv;
-      _busy = true;
-      try {
-        await _check();
-      } finally {
-        _busy = false;
-      }
-    }
-    if (state.phase == Phase.running && e >= state.total) {
-      await _finish(true);
     }
   }
 
@@ -331,26 +347,18 @@ class SessionCtl extends Notifier<SS> {
   }
 
   SessionRecord _record(bool done) {
-    final planned = state.total ~/ 60;
-    final rawScore = state.phoneMode
-        ? (done ? 1.0 : 0.7)
-        : (state.checks.isEmpty
-            ? 0.0
-            : (state.checks.where((c) => c == FocusState.study).length +
-                    .5 * state.checks.where((c) => c == FocusState.neutral).length) /
-                state.checks.length);
+    final elapsedMin = max(1, DateTime.now().difference(_start).inSeconds ~/ 60);
+    final iv = max(10, 60 ~/ max(1, state.checksPerMin));
+    final rawScore = state.phoneMode ? 1.0 : state.liveScore;
     final focusMin = state.phoneMode
-        ? (done ? planned : state.elapsed ~/ 60)
-        : (state.checks.where((c) => c == FocusState.study).length *
-                ref.read(prefsProvider).intervalSec) ~/
-            60;
-    // 2x Combo XP when completing with >=90% focus!
+        ? elapsedMin
+        : (state.checks.where((c) => c == FocusState.study).length * iv) ~/ 60;
     final mult = (done && rawScore >= 0.90) ? 2 : 1;
     final xp = max(0, focusMin * mult);
     return SessionRecord(
       start: _start,
-      plannedMin: planned,
-      intervalSec: ref.read(prefsProvider).intervalSec,
+      plannedMin: elapsedMin,
+      intervalSec: iv,
       checks: state.checks,
       tokensLost: state.calib ? 0 : state.maxTokens - state.tokens,
       calibration: state.calib,
@@ -364,8 +372,10 @@ class SessionCtl extends Notifier<SS> {
   }
 
   Future<void> _teardown() async {
-    _t?.cancel();
-    _t = null;
+    _checkTimer?.cancel();
+    _checkTimer = null;
+    _cooldownTimer?.cancel();
+    _cooldownTimer = null;
     await vision.dispose();
     await Blocker.setWakelock(false);
     await Blocker.setBrownNoise(false);
@@ -390,7 +400,7 @@ class SessionCtl extends Notifier<SS> {
     }
     var left = pr.cooldownSec;
     state = state.copy(phase: Phase.locked, cooldown: left, brownNoise: false);
-    _t = Timer.periodic(const Duration(seconds: 1), (t) {
+    _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
       left--;
       if (left <= 0) {
         t.cancel();
@@ -401,16 +411,15 @@ class SessionCtl extends Notifier<SS> {
     });
   }
 
-  Future<void> _finish(bool done) async {
+  Future<void> finishSession() async {
     await _teardown();
-    final rec = _record(done);
+    final rec = _record(true);
     final id = await Repo.save(rec);
     ref.read(dbVersionProvider.notifier).state++;
     final pn = ref.read(prefsProvider.notifier);
     final pr = ref.read(prefsProvider);
 
-    if (done && rec.score >= 0.90 && pr.citadelCracks > 0) {
-      // Repair a crimson fracture with a clean >=90% session!
+    if (rec.score >= 0.90 && pr.citadelCracks > 0) {
       pn.set({'citadelCracks': max(0, pr.citadelCracks - 1)});
     }
 
@@ -420,7 +429,7 @@ class SessionCtl extends Notifier<SS> {
     } else {
       pn.set({'tokLeft': state.tokens});
       final today = dayKey(DateTime.now());
-      if (done && pr.lastStreakDay != today) {
+      if (pr.lastStreakDay != today) {
         final y = dayKey(DateTime.now().subtract(const Duration(days: 1)));
         final nextStreak = pr.lastStreakDay == y ? pr.streak + 1 : 1;
         final earnedShield = (nextStreak > 0 && nextStreak % 7 == 0 && pr.streakShields < 2)
@@ -431,20 +440,7 @@ class SessionCtl extends Notifier<SS> {
           'lastStreakDay': today,
           'streakShields': earnedShield,
         });
-      } else if (!done && pr.streakReset) {
-        if (pr.streakShields > 0) {
-          pn.set({'streakShields': pr.streakShields - 1});
-        } else {
-          pn.set({'streak': 0});
-        }
       }
-    }
-
-    if (done && state.phoneMode) {
-      await Blocker.showNotification(
-        'FocusGuard · Block Complete',
-        '${state.subject} (${state.mode}) finished! Open FocusGuard to log your revision topic & MCQs.',
-      );
     }
 
     state = state.copy(
@@ -453,14 +449,6 @@ class SessionCtl extends Notifier<SS> {
       result: rec,
       brownNoise: false,
     );
-  }
-
-  Future<void> abandon() async {
-    if (state.hardcoreGt && !state.calib) {
-      await _punish();
-    } else {
-      await _finish(false);
-    }
   }
 
   void dismiss() => state = const SS();

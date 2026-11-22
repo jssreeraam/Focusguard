@@ -1,6 +1,4 @@
 import 'dart:math';
-import 'dart:ui' show FontFeature;
-import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/repo.dart';
@@ -8,28 +6,20 @@ import '../domain/models.dart';
 import '../state/providers.dart';
 import 'common.dart';
 
-class RingPainter extends CustomPainter {
-  final double p;
+class GradeRingPainter extends CustomPainter {
+  final double score;
   final Color c;
-  RingPainter(this.p, this.c);
+  GradeRingPainter(this.score, this.c);
 
   @override
   void paint(Canvas cv, Size s) {
     final r = Rect.fromCircle(center: s.center(Offset.zero), radius: s.width / 2 - 8);
     cv.drawArc(
       r, 0, 2 * pi, false,
-      Paint()..style = PaintingStyle.stroke..strokeWidth = 8..color = Colors.white.withOpacity(.16),
+      Paint()..style = PaintingStyle.stroke..strokeWidth = 8..color = Colors.white.withOpacity(.14),
     );
     cv.drawArc(
-      r, -pi / 2, 2 * pi * p, false,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 14
-        ..color = c.withOpacity(.30)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
-    );
-    cv.drawArc(
-      r, -pi / 2, 2 * pi * p, false,
+      r, -pi / 2, 2 * pi * score.clamp(0.0, 1.0), false,
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 8
@@ -39,7 +29,7 @@ class RingPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(RingPainter o) => o.p != p || o.c != c;
+  bool shouldRepaint(GradeRingPainter o) => o.score != score || o.c != c;
 }
 
 class SessionScreen extends ConsumerStatefulWidget {
@@ -48,11 +38,7 @@ class SessionScreen extends ConsumerStatefulWidget {
   ConsumerState<SessionScreen> createState() => _S();
 }
 
-class _S extends ConsumerState<SessionScreen>
-    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
-  late final AnimationController _br =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 3400))
-        ..repeat(reverse: true);
+class _S extends ConsumerState<SessionScreen> with WidgetsBindingObserver {
   bool _dimmed = false;
 
   @override
@@ -64,7 +50,6 @@ class _S extends ConsumerState<SessionScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _br.dispose();
     super.dispose();
   }
 
@@ -74,30 +59,16 @@ class _S extends ConsumerState<SessionScreen>
     if (state == AppLifecycleState.inactive || state == AppLifecycleState.paused) {
       ctl.pauseCamera();
     } else if (state == AppLifecycleState.resumed) {
-      ctl.resumeCamera().then((_) {
-        if (mounted) setState(() {});
-      });
+      ctl.resumeCamera();
     }
-  }
-
-  String _mmss(int s) {
-    final clamped = max(0, s);
-    final h = clamped ~/ 3600;
-    final m = (clamped % 3600) ~/ 60;
-    final sec = clamped % 60;
-    if (h > 0) {
-      return '$h:${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}';
-    }
-    return '${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}';
   }
 
   @override
   Widget build(BuildContext context) {
     final s = ref.watch(sessionProvider);
     final ctl = ref.read(sessionProvider.notifier);
-    final iv = ref.read(prefsProvider).intervalSec;
     final col = s.phoneMode ? const Color(0xFF7AE29E) : s.last.color;
-    final cam = ctl.vision.cam;
+    final pct = (s.liveScore * 100).round();
 
     if (_dimmed) {
       return GestureDetector(
@@ -109,18 +80,22 @@ class _S extends ConsumerState<SessionScreen>
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                _mmss(s.total - s.elapsed),
+                '$pct%',
                 style: const TextStyle(
-                  fontSize: 44,
+                  fontSize: 46,
                   color: Color(0xFF444455),
-                  fontWeight: FontWeight.w700,
-                  fontFeatures: [FontFeature.tabularFigures()],
+                  fontWeight: FontWeight.w800,
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
+              Text(
+                '${s.checks.length} GRADED · STEALTH BATTERY MODE',
+                style: const TextStyle(color: Color(0xFF333344), letterSpacing: 1.8, fontSize: 11),
+              ),
+              const SizedBox(height: 4),
               const Text(
-                'STEALTH DIM · TAP TO WAKE',
-                style: TextStyle(color: Color(0xFF333344), letterSpacing: 2, fontSize: 11),
+                'TAP TO WAKE',
+                style: TextStyle(color: Color(0xFF282836), letterSpacing: 2, fontSize: 10),
               ),
             ],
           ),
@@ -148,20 +123,18 @@ class _S extends ConsumerState<SessionScreen>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          s.hardcoreGt
-                              ? 'HARDCORE GT'
-                              : (s.phoneMode
-                                  ? 'PHONE STUDY'
-                                  : (s.calib ? 'CALIBRATING' : 'STUDYING')),
-                          style: TextStyle(
-                            color: s.hardcoreGt ? const Color(0xFFFF7A7A) : const Color(0xFFFFCE7A),
+                          s.phoneMode
+                              ? 'PHONE STUDY'
+                              : (s.calib ? 'CALIBRATING' : 'RANDOM PROCTOR'),
+                          style: const TextStyle(
+                            color: Color(0xFFFFCE7A),
                             letterSpacing: 3,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '${s.subject} · ${s.mode}',
+                          '${s.subject} · ${s.mode}${s.phoneMode ? '' : ' · ${s.checksPerMin}/min random'}',
                           style: const TextStyle(color: Colors.white70, fontSize: 13),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -177,27 +150,10 @@ class _S extends ConsumerState<SessionScreen>
                     onPressed: () => ctl.toggleBrownNoise(),
                   ),
                   IconButton(
-                    tooltip: 'Stealth Dim',
+                    tooltip: 'Stealth Battery Mode',
                     icon: const Icon(Icons.brightness_2_outlined, color: Colors.white60),
                     onPressed: () => setState(() => _dimmed = true),
                   ),
-                  if (!s.phoneMode && cam != null && cam.value.isInitialized && cam.value.previewSize != null)
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(14),
-                      child: SizedBox(
-                        width: 48,
-                        height: 64,
-                        child: FittedBox(
-                          fit: BoxFit.cover,
-                          clipBehavior: Clip.hardEdge,
-                          child: SizedBox(
-                            width: cam.value.previewSize!.height,
-                            height: cam.value.previewSize!.width,
-                            child: CameraPreview(cam),
-                          ),
-                        ),
-                      ),
-                    ),
                 ],
               ),
               if (s.goalNote.isNotEmpty)
@@ -211,62 +167,35 @@ class _S extends ConsumerState<SessionScreen>
                   ),
                 ),
               const Spacer(),
-              // Cozy 2D Illustrated Study Companion + Breathing Ring
-              AnimatedBuilder(
-                animation: _br,
-                builder: (_, __) {
-                  final bob = sin(_br.value * pi) * 5.0;
-                  return SizedBox(
-                    width: 266,
-                    height: 266,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        Container(
-                          width: 214 + _br.value * 14,
-                          height: 214 + _br.value * 14,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFFFFC971).withOpacity(.18 + _br.value * .14),
-                                blurRadius: 48,
-                                spreadRadius: 6,
-                              )
-                            ],
-                          ),
-                        ),
-                        TweenAnimationBuilder<double>(
-                          tween: Tween<double>(end: s.total == 0 ? 0.0 : s.elapsed / s.total),
-                          duration: const Duration(seconds: 1),
-                          builder: (_, v, __) => CustomPaint(
-                            size: const Size(266, 266),
-                            painter: RingPainter(v, col),
-                          ),
-                        ),
-                        Transform.translate(
-                          offset: Offset(0, -bob),
-                          child: ClipOval(
-                            child: SizedBox(
-                              width: 210,
-                              height: 210,
-                              child: Image.asset('assets/study_girl.png', fit: BoxFit.cover),
-                            ),
-                          ),
-                        ),
-                      ],
+              // Static low-battery 2D Study Girl + Live Focus Grade Ring (no 60fps burn!)
+              SizedBox(
+                width: 248,
+                height: 248,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    CustomPaint(
+                      size: const Size(248, 248),
+                      painter: GradeRingPainter(s.liveScore, col),
                     ),
-                  );
-                },
+                    ClipOval(
+                      child: SizedBox(
+                        width: 204,
+                        height: 204,
+                        child: Image.asset('assets/study_girl.png', fit: BoxFit.cover),
+                      ),
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 14),
               Text(
-                _mmss(s.total - s.elapsed),
+                s.phoneMode ? 'LOCKED IN' : '$pct% FOCUS',
                 style: const TextStyle(
-                  fontSize: 46,
+                  fontSize: 36,
                   color: Colors.white,
                   fontWeight: FontWeight.w800,
-                  fontFeatures: [FontFeature.tabularFigures()],
+                  letterSpacing: 1.2,
                 ),
               ),
               const SizedBox(height: 6),
@@ -278,8 +207,10 @@ class _S extends ConsumerState<SessionScreen>
                   border: Border.all(color: col),
                 ),
                 child: Text(
-                  s.phoneMode ? 'DISTRACTION APPS LOCKED' : s.last.label.toUpperCase(),
-                  style: TextStyle(color: col, fontSize: 11.5, fontWeight: FontWeight.w700, letterSpacing: 1.8),
+                  s.phoneMode
+                      ? 'DISTRACTION APPS LOCKED'
+                      : '${s.last.label.toUpperCase()} · ${s.checks.length} GRADED',
+                  style: TextStyle(color: col, fontSize: 11.5, fontWeight: FontWeight.w700, letterSpacing: 1.6),
                 ),
               ),
               const Spacer(),
@@ -298,42 +229,37 @@ class _S extends ConsumerState<SessionScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'TIMELINE · NEXT CHECK IN ${iv - (s.elapsed % iv)}S',
-                        style: const TextStyle(color: Colors.white60, fontSize: 10.5, letterSpacing: 1.4, fontWeight: FontWeight.w700),
+                        'GRADINGS · ${s.checksPerMin} RANDOM CHECKS/MIN (NO TIMER)',
+                        style: const TextStyle(color: Colors.white60, fontSize: 10.5, letterSpacing: 1.3, fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(height: 8),
                       Timeline(s.checks.length > 40 ? s.checks.sublist(s.checks.length - 40) : s.checks),
                       const SizedBox(height: 6),
                       Text(
-                        s.checks.isEmpty ? 'Quietly studying together.' : s.last.message,
-                        style: const TextStyle(color: Colors.white70, fontSize: 12.5),
+                        ctl.vision.lastInfo,
+                        style: const TextStyle(color: Colors.white70, fontSize: 12),
                       ),
                     ],
                   ),
+                )
+              else
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(.08),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Text(
+                    'Phone-Study Mode active: Distraction apps are locked while you use Marrow / PrepLadder / Anki. Tap Finish & Save when done.',
+                    style: TextStyle(color: Colors.white70, fontSize: 12.5),
+                  ),
                 ),
               BigButton(
-                s.hardcoreGt ? 'Abandon Hardcore GT (Triggers Lock!)' : 'End session early',
-                () async {
-                  final ok = await showDialog<bool>(
-                    context: context,
-                    builder: (_) => AlertDialog(
-                      title: const Text('End session?'),
-                      content: Text(
-                        s.hardcoreGt
-                            ? 'Abandoning a 3h Hardcore GT triggers your full app lockdown immediately.'
-                            : (ref.read(prefsProvider).streakReset && !s.calib
-                                ? 'Your streak will reset (unless protected by a Streak Shield).'
-                                : 'This ends the session.'),
-                      ),
-                      actions: [
-                        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Keep going')),
-                        TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('End')),
-                      ],
-                    ),
-                  );
-                  if (ok == true) ctl.abandon();
-                },
-                ghost: true,
+                'Finish & Save Study Block',
+                () => ctl.finishSession(),
+                fill: kAmber,
               ),
             ],
           ),
@@ -360,21 +286,13 @@ class LockScreen extends ConsumerWidget {
               'PENALTY TRIGGERED',
               style: TextStyle(color: Color(0xFFFF8A8A), letterSpacing: 5, fontSize: 13, decoration: TextDecoration.none),
             ),
-            TweenAnimationBuilder<double>(
-              tween: Tween<double>(begin: .6, end: 1),
-              duration: const Duration(milliseconds: 600),
-              curve: Curves.elasticOut,
-              builder: (_, v, __) => Transform.scale(
-                scale: v,
-                child: Text(
-                  '${s.cooldown}',
-                  style: const TextStyle(
-                    fontSize: 110,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFFFF8A8A),
-                    decoration: TextDecoration.none,
-                  ),
-                ),
+            Text(
+              '${s.cooldown}',
+              style: const TextStyle(
+                fontSize: 110,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFFFF8A8A),
+                decoration: TextDecoration.none,
               ),
             ),
             Text(
@@ -473,9 +391,9 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                r.completed ? 'SESSION COMPLETE' : 'SESSION ENDED',
-                style: const TextStyle(color: kInk, letterSpacing: 2.5, fontWeight: FontWeight.w800),
+              const Text(
+                'GRADING COMPLETE',
+                style: TextStyle(color: kInk, letterSpacing: 2.5, fontWeight: FontWeight.w800),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
@@ -494,19 +412,14 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
           Text('${r.subject} · ${r.mode}', style: const TextStyle(color: kMute, fontSize: 14)),
           const SizedBox(height: 12),
           Center(
-            child: TweenAnimationBuilder<int>(
-              tween: IntTween(begin: 0, end: pct),
-              duration: const Duration(milliseconds: 1200),
-              curve: Curves.easeOutCubic,
-              builder: (_, v, __) => Text(
-                '$v%',
-                style: const TextStyle(fontSize: 72, fontWeight: FontWeight.w800, color: kInk),
-              ),
+            child: Text(
+              '$pct%',
+              style: const TextStyle(fontSize: 72, fontWeight: FontWeight.w800, color: kInk),
             ),
           ),
           Center(
             child: Text(
-              '${fmtMins(r.focusedSec ~/ 60)} focused${r.calibration ? ' · calibration' : ''}',
+              '${fmtMins(r.focusedSec ~/ 60)} focused · ${r.checks.length} random checks${r.calibration ? ' · calibration' : ''}',
               style: const TextStyle(color: kMute),
             ),
           ),
