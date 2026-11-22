@@ -59,7 +59,7 @@ jobs:
           sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 36/g' "$GRADLE_FILE"
           sed -i 's/targetSdk = flutter.targetSdkVersion/targetSdk = 36/g' "$GRADLE_FILE"
           sed -i 's/targetSdkVersion flutter.targetSdkVersion/targetSdkVersion 36/g' "$GRADLE_FILE"
-          printf '\nandroid {\n    lint {\n        checkReleaseBuilds = false\n        abortOnError = false\n    }\n}\n' >> "$GRADLE_FILE"
+          printf '\nandroid {\n    lint {\n        checkReleaseBuilds = false\n        abortOnError = false\n    }\n    buildTypes {\n        getByName("release") {\n            isMinifyEnabled = false\n            isShrinkResources = false\n        }\n    }\n}\n' >> "$GRADLE_FILE"
 
       - name: Build Release APK
         working-directory: build_app
