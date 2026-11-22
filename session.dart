@@ -378,8 +378,7 @@ class LockScreen extends ConsumerWidget {
               ),
             ),
             Text(
-              'Cooldown.${p.lockHours > 0 && p.pkgs.isNotEmpty ? ' Selected apps locked for ${p.lockHours}h (anti-tamper active).' : ''}
-Sit up. Breathe. Repair your Citadel with a 90%+ focus block.',
+              'Cooldown.${p.lockHours > 0 && p.pkgs.isNotEmpty ? ' Selected apps locked for ${p.lockHours}h (anti-tamper active).' : ''}\nSit up. Breathe. Repair your Citadel with a 90%+ focus block.',
               textAlign: TextAlign.center,
               style: const TextStyle(
                 color: Colors.white70,

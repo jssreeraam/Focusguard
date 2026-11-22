@@ -80,7 +80,7 @@ class _R extends ConsumerState<RulesScreen> with WidgetsBindingObserver {
         on: true,
         hour: picked.hour,
         minute: picked.minute,
-        body: 'Open your Revise tab and clear today's spaced repetition topics!',
+        body: "Open your Revise tab and clear today's spaced repetition topics!",
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -331,7 +331,7 @@ class _R extends ConsumerState<RulesScreen> with WidgetsBindingObserver {
                       on: v,
                       hour: p.reminderHour,
                       minute: p.reminderMin,
-                      body: 'Open Revise tab and clear today's spaced repetition topics!',
+                      body: "Open Revise tab and clear today's spaced repetition topics!",
                     );
                   },
                 ),
