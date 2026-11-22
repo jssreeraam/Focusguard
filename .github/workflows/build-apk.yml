@@ -1,0 +1,80 @@
+name: Build FocusGuard APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-android-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Flutter 3.24.5
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.5'
+          channel: 'stable'
+          cache: true
+
+      - name: Assemble Android Flutter project
+        run: |
+          set -e
+          flutter create --org com.focusguard --project-name focusguard --platforms=android build_app
+          rm -rf build_app/lib build_app/test
+
+          mkdir -p build_app/lib/domain build_app/lib/data build_app/lib/services build_app/lib/state build_app/lib/ui build_app/assets
+          cp main.dart build_app/lib/
+          cp models.dart build_app/lib/domain/
+          cp repo.dart build_app/lib/data/
+          cp blocker.dart vision.dart build_app/lib/services/
+          cp providers.dart build_app/lib/state/
+          cp common.dart home.dart insights.dart rules.dart session.dart build_app/lib/ui/
+          cp icon.png build_app/assets/
+          cp pubspec.yaml build_app/
+
+          MAIN_DIR="build_app/android/app/src/main"
+          mkdir -p "$MAIN_DIR/kotlin/com/focusguard/focusguard" "$MAIN_DIR/res/values" "$MAIN_DIR/res/xml"
+          cp AndroidManifest.xml "$MAIN_DIR/"
+          cp BlockerService.kt BootReceiver.kt FocusAdminReceiver.kt LockGuardService.kt LockStore.kt MainActivity.kt "$MAIN_DIR/kotlin/com/focusguard/focusguard/"
+          cp fg_strings.xml "$MAIN_DIR/res/values/"
+          cp blocker_config.xml device_admin.xml "$MAIN_DIR/res/xml/"
+          for d in mipmap-mdpi mipmap-hdpi mipmap-xhdpi mipmap-xxhdpi mipmap-xxxhdpi; do
+            mkdir -p "$MAIN_DIR/res/$d"
+            cp ic_launcher.png "$MAIN_DIR/res/$d/ic_launcher.png"
+          done
+
+          GRADLE_FILE=$(ls build_app/android/app/build.gradle* | head -n 1)
+          sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 24/g' "$GRADLE_FILE"
+          sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 24/g' "$GRADLE_FILE"
+          sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 34/g' "$GRADLE_FILE"
+          sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 34/g' "$GRADLE_FILE"
+          sed -i 's/targetSdk = flutter.targetSdkVersion/targetSdk = 34/g' "$GRADLE_FILE"
+          sed -i 's/targetSdkVersion flutter.targetSdkVersion/targetSdkVersion 34/g' "$GRADLE_FILE"
+
+      - name: Build Release APK
+        working-directory: build_app
+        run: |
+          set -e
+          flutter pub get
+          flutter build apk --release --split-per-abi
+          flutter build apk --release
+          ls -lh build/app/outputs/flutter-apk/
+
+      - name: Upload FocusGuard APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: FocusGuard-APK
+          path: |
+            build_app/build/app/outputs/flutter-apk/app-release.apk
+            build_app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+          retention-days: 30
+          
