@@ -5,22 +5,23 @@ import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:google_mlkit_image_labeling/google_mlkit_image_labeling.dart';
 import '../domain/models.dart';
 
-/// 100% on-device low-battery vision supporting Back (default) and Front cameras.
-/// Uses ResolutionPreset.low for fast ML Kit inference and minimal battery drain.
+/// 100% on-device low-battery Rear-Camera proctor.
+/// Checks live face presence + phone-in-hand + extreme head turn.
+/// Eye-open angle is intentionally disabled so looking down at books never penalizes you.
 class VisionService {
   CameraController? cam;
   final _face = FaceDetector(
     options: FaceDetectorOptions(
-      enableClassification: true,
+      enableClassification: false,
       performanceMode: FaceDetectorMode.accurate,
       minFaceSize: 0.08,
     ),
   );
   final _labels = ImageLabeler(
-    options: ImageLabelerOptions(confidenceThreshold: .7),
+    options: ImageLabelerOptions(confidenceThreshold: .75),
   );
 
-  int _miss = 0, _away = 0, _eyes = 0;
+  int _miss = 0, _away = 0;
   bool _capturing = false;
   bool _initializing = false;
   String lastInfo = 'Waiting for first random check...';
@@ -34,9 +35,8 @@ class VisionService {
       if (cams.isEmpty) {
         throw StateError('No camera found on this device.');
       }
-      final target = useRear ? CameraLensDirection.back : CameraLensDirection.front;
       final selected = cams.firstWhere(
-        (c) => c.lensDirection == target,
+        (c) => c.lensDirection == CameraLensDirection.back,
         orElse: () => cams.first,
       );
       final controller = CameraController(
@@ -45,14 +45,12 @@ class VisionService {
         enableAudio: false,
       );
       await controller.initialize();
-      if (selected.lensDirection == CameraLensDirection.back) {
-        try {
-          await controller.setFlashMode(FlashMode.off);
-        } catch (_) {}
-      }
+      try {
+        await controller.setFlashMode(FlashMode.off);
+      } catch (_) {}
       cam = controller;
-      _miss = _away = _eyes = 0;
-      lastInfo = 'Ready (${selected.lensDirection.name} cam · low power)';
+      _miss = _away = 0;
+      lastInfo = 'Rear camera ready (low power · flash OFF)';
     } finally {
       _initializing = false;
     }
@@ -75,14 +73,13 @@ class VisionService {
 
       if (faces.isEmpty) {
         _away = 0;
-        _eyes = 0;
         _miss++;
         lastInfo = _miss >= 2 ? 'No face (2/2) -> Absent' : 'No face (1/2) -> Grace';
         return _miss >= 2 ? FocusState.absent : FocusState.neutral;
       }
       _miss = 0;
 
-      // Isolate image labeling so labeler errors never break face detection
+      // Isolate phone-in-hand detection so labeler errors never break face detection
       try {
         final labels = await _labels.processImage(img);
         final phone = labels.any(
@@ -96,24 +93,15 @@ class VisionService {
 
       final f = faces.first;
       final yaw = (f.headEulerAngleY ?? 0).abs();
-      final eyes =
-          ((f.leftEyeOpenProbability ?? 1) + (f.rightEyeOpenProbability ?? 1)) / 2;
 
-      if (yaw > 42) {
+      if (yaw > 50) {
         _away++;
-        _eyes = 0;
-        lastInfo = 'Looking away (${yaw.round()}°) [$_away/2]';
+        lastInfo = 'Turned away (${yaw.round()}°) [$_away/2]';
         return _away >= 2 ? FocusState.distraction : FocusState.neutral;
       }
       _away = 0;
 
-      if (eyes < .15) {
-        _eyes++;
-        lastInfo = 'Eyes closed (${(eyes * 100).round()}%) [$_eyes/2]';
-        return _eyes >= 2 ? FocusState.distraction : FocusState.neutral;
-      }
-      _eyes = 0;
-      lastInfo = 'Focused (yaw ${yaw.round()}°, eyes ${(eyes * 100).round()}%)';
+      lastInfo = 'Live face locked in (yaw ${yaw.round()}°)';
       return FocusState.study;
     } catch (e) {
       lastInfo = 'Check error: $e';

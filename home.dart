@@ -256,21 +256,12 @@ class _H extends ConsumerState<HomeScreen> with WidgetsBindingObserver {
                   children: [
                     const Text(
                       'FOCUSGUARD',
-                      style: TextStyle(color: kInk, letterSpacing: 3, fontWeight: FontWeight.w800),
+                      style: TextStyle(color: kInk, fontSize: 18, letterSpacing: 3, fontWeight: FontWeight.w900),
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      (iniDays != null && iniDays >= 0) || (neetDays != null && neetDays >= 0)
-                          ? [
-                              if (iniDays != null && iniDays >= 0) 'INI-CET ${iniDays}d',
-                              if (neetDays != null && neetDays >= 0) 'NEET PG ${neetDays}d',
-                            ].join(' · ')
-                          : 'The Digital Study Warden.',
-                      style: TextStyle(
-                        color: (iniDays != null || neetDays != null) ? kGreen : kMute,
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    const Text(
+                      'The Digital Study Warden',
+                      style: TextStyle(color: kMute, fontSize: 13.5, fontWeight: FontWeight.w600),
                     ),
                   ],
                 ),
@@ -298,6 +289,42 @@ class _H extends ConsumerState<HomeScreen> with WidgetsBindingObserver {
             ],
           ),
           const SizedBox(height: 16),
+          if ((iniDays != null && iniDays >= 0) || (neetDays != null && neetDays >= 0))
+            Panel(
+              Row(
+                children: [
+                  if (iniDays != null && iniDays >= 0)
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('INI-CET DEADLINE',
+                              style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, letterSpacing: 1.4, color: kMute)),
+                          const SizedBox(height: 4),
+                          Text('$iniDays DAYS',
+                              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: kInk, height: 1.05)),
+                        ],
+                      ),
+                    ),
+                  if ((iniDays != null && iniDays >= 0) && (neetDays != null && neetDays >= 0))
+                    Container(width: 1.5, height: 44, margin: const EdgeInsets.symmetric(horizontal: 14), color: kLine),
+                  if (neetDays != null && neetDays >= 0)
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('NEET PG DEADLINE',
+                              style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, letterSpacing: 1.4, color: kMute)),
+                          const SizedBox(height: 4),
+                          Text('$neetDays DAYS',
+                              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: kAmber, height: 1.05)),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+              color: kButter,
+            ),
           if (lockRemMs > 0)
             Panel(
               Column(
@@ -353,7 +380,7 @@ class _H extends ConsumerState<HomeScreen> with WidgetsBindingObserver {
                       children: [
                         Text(
                           '${p.isDutyDay ? 'Duty' : 'Off'} goal: ${fmtMins(mins)} / ${fmtMins(goal)}',
-                          style: const TextStyle(fontSize: 12, color: kMute),
+                          style: const TextStyle(fontSize: 13.5, color: kMute),
                         ),
                         Text(
                           '${(pct * 100).round()}%',
@@ -419,7 +446,7 @@ class _H extends ConsumerState<HomeScreen> with WidgetsBindingObserver {
                   children: [
                     Expanded(
                       child: ChoiceChip(
-                        label: Text(p.useRearCam ? 'Back Cam Proctor' : 'Front Cam Proctor'),
+                        label: const Text('Rear Cam Proctor'),
                         selected: !p.phoneStudyMode,
                         onSelected: (_) => ref.read(prefsProvider.notifier).set({'phoneStudyMode': false}),
                       ),
@@ -435,21 +462,14 @@ class _H extends ConsumerState<HomeScreen> with WidgetsBindingObserver {
                   ],
                 ),
                 if (!p.phoneStudyMode) ...[
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      TextButton.icon(
-                        onPressed: () => ref.read(prefsProvider.notifier).set({'useRearCam': !p.useRearCam}),
-                        icon: Icon(p.useRearCam ? Icons.camera_rear : Icons.camera_front, size: 16),
-                        label: Text(p.useRearCam ? 'Switch to Front' : 'Switch to Back'),
-                      ),
-                      const Spacer(),
-                      TextButton.icon(
-                        onPressed: () => _framingPreview(p.useRearCam),
-                        icon: const Icon(Icons.crop_free, size: 16),
-                        label: const Text('Check Framing'),
-                      ),
-                    ],
+                  const SizedBox(height: 6),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: () => _framingPreview(true),
+                      icon: const Icon(Icons.crop_free, size: 18),
+                      label: const Text('Check Rear Camera Framing', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700)),
+                    ),
                   ),
                 ],
                 const SizedBox(height: 8),
@@ -469,7 +489,7 @@ class _H extends ConsumerState<HomeScreen> with WidgetsBindingObserver {
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(p.lastSubject,
-                              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
                         ),
                         const Text('19 Subjects', style: TextStyle(color: kAmber, fontSize: 12)),
                         const Icon(Icons.chevron_right, color: kAmber, size: 18),
@@ -511,7 +531,7 @@ class _H extends ConsumerState<HomeScreen> with WidgetsBindingObserver {
                 ),
                 const SizedBox(height: 10),
                 const Text('Random checks per minute (anti-cheat)',
-                    style: TextStyle(fontSize: 12, color: kMute, fontWeight: FontWeight.w600)),
+                    style: TextStyle(fontSize: 13.5, color: kMute, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 6),
                 Wrap(
                   spacing: 8,
@@ -558,8 +578,8 @@ class _H extends ConsumerState<HomeScreen> with WidgetsBindingObserver {
 
   Widget _stat(String v, String l) => Column(
         children: [
-          Text(v, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
-          Text(l.toUpperCase(), style: const TextStyle(fontSize: 10, color: kMute, letterSpacing: 1)),
+          Text(v, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800)),
+          Text(l.toUpperCase(), style: const TextStyle(fontSize: 11.5, color: kMute, fontWeight: FontWeight.w700, letterSpacing: 1)),
         ],
       );
 }

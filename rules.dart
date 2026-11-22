@@ -343,23 +343,7 @@ class _R extends ConsumerState<RulesScreen> with WidgetsBindingObserver {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Cap('Proctor camera & random checks/min'),
-                Wrap(
-                  spacing: 8,
-                  children: [
-                    ChoiceChip(
-                      label: const Text('Back camera'),
-                      selected: p.useRearCam,
-                      onSelected: (_) => n.set({'useRearCam': true}),
-                    ),
-                    ChoiceChip(
-                      label: const Text('Front camera'),
-                      selected: !p.useRearCam,
-                      onSelected: (_) => n.set({'useRearCam': false}),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
+                const Cap('Rear camera random checks/min'),
                 const Text('Randomized checks per minute', style: TextStyle(fontSize: 12.5, color: kMute)),
                 const SizedBox(height: 6),
                 Wrap(
